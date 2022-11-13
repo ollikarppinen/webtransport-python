@@ -105,9 +105,10 @@ logger = logging.getLogger(__name__)
 #     datagram that was just received.
 class ChunkHandler:
 
-    def __init__(self, session_id, http: H3Connection) -> None:
+    def __init__(self, session_id, protocol: QuicConnectionProtocol) -> None:
         self._session_id = session_id
-        self._http = http
+        self._http = protocol._http
+        self.protocol = protocol
         self._counters = defaultdict(int)
 
     def h3_event_received(self, event: H3Event) -> None:
@@ -139,31 +140,32 @@ class ChunkHandler:
         except KeyError:
             pass
 
-    async def datagram_chunk_handler(self, stream_id):
-        i = 0
-        while i < 10:
-            payload = str("new ts chunk: {}".format(i)).encode('ascii')
-            logger.info("Sending chunk #{}".format(i))
-            self._http.send_datagram(stream_id, payload)
-            i += 1
-            await asyncio.sleep(2)
-
-        payload = str("Done").encode('ascii')
+async def datagram_chunk_handler(self, stream_id):
+    i = 0
+    while i < 10:
+        payload = str("new .ts chunk: {}".format(i)).encode('ascii')
+        logger.info("Sending chunk #{}".format(i))
         self._http.send_datagram(stream_id, payload)
+        self.protocol.transmit()
+        i += 1
+        await asyncio.sleep(2)
 
-    async def stream_chunk_handler(self, stream_id):
-        i = 0
-        while i < 10:
-            payload = str("new tls chunk: {}".format(i)).encode('ascii')
-            logger.info("Sending chunk #{}".format(i))
-            self._http._quic.send_stream_data(stream_id, payload, end_stream=False)
-            i += 1
-            await asyncio.sleep(2)
+    payload = str("Done").encode('ascii')
+    self._http.send_datagram(stream_id, payload)
 
-        payload = str("Done").encode('ascii')
-        self._http._quic.send_stream_data(stream_id, payload, end_stream=True)
+async def stream_chunk_handler(self, stream_id):
+    i = 0
+    while i < 10:
+        payload = str("new .ts chunk: {}".format(i)).encode('ascii')
+        logger.info("Sending chunk #{}".format(i))
+        self._http._quic.send_stream_data(stream_id, payload, end_stream=False)
+        self.protocol.transmit()
+        self.transmit()
+        i += 1
+        await asyncio.sleep(2)
 
-
+    payload = str("Done").encode('ascii')
+    self._http._quic.send_stream_data(stream_id, payload, end_stream=True)
 
 # WebTransportProtocol handles the beginning of a WebTransport connection: it
 # responses to an extended CONNECT method request, and routes the transport
@@ -213,7 +215,7 @@ class WebTransportProtocol(QuicConnectionProtocol):
             return
         if path == b"/chunks":
             assert(self._handler is None)
-            self._handler = ChunkHandler(stream_id, self._http)
+            self._handler = ChunkHandler(stream_id, self)
             self._send_response(stream_id, 200)
         else:
             self._send_response(stream_id, 404, end_stream=True)
