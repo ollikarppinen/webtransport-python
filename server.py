@@ -77,6 +77,7 @@ This will output "13" (the length of "Hello, world!") into the console.
 import argparse
 import asyncio
 import logging
+import sys
 from collections import defaultdict
 from typing import Dict, Optional
 
@@ -90,6 +91,7 @@ from aioquic.quic.events import ProtocolNegotiated, StreamReset, QuicEvent
 BIND_ADDRESS = '::1'
 BIND_PORT = 4433
 
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # CounterHandler implements a really simple protocol:
@@ -111,6 +113,7 @@ class CounterHandler:
     def h3_event_received(self, event: H3Event) -> None:
         if isinstance(event, DatagramReceived):
             payload = str(len(event.data)).encode('ascii')
+            logging.info("received data: {}".format(event.data))
             self._http.send_datagram(self._session_id, payload)
 
         if isinstance(event, WebTransportStreamDataReceived):
