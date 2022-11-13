@@ -112,13 +112,15 @@ class CounterHandler:
 
     def h3_event_received(self, event: H3Event) -> None:
         if isinstance(event, DatagramReceived):
-            payload = str(len(event.data)).encode('ascii')
+            # payload = str(len(event.data)).encode('ascii')
             logging.info("received data: {}".format(event.data))
-            self._http.send_datagram(self._session_id, payload)
+            # self._http.send_datagram(self._session_id, payload)
+            asyncio.create_task(chunk_handler(self, self._session_id))
 
         if isinstance(event, WebTransportStreamDataReceived):
             self._counters[event.stream_id] += len(event.data)
             if event.stream_ended:
+                logger.info("event.stream_ended")
                 if stream_is_unidirectional(event.stream_id):
                     response_id = self._http.create_webtransport_stream(
                         self._session_id, is_unidirectional=True)
@@ -135,6 +137,18 @@ class CounterHandler:
         except KeyError:
             pass
 
+
+async def chunk_handler(self, stream_id):
+    i = 0
+    while i < 10:
+        payload = str("new tls chunk: {}".format(i)).encode('ascii')
+        logger.info("Sending chunk #{}".format(i))
+        self._http.send_datagram(stream_id, payload)
+        i += 1
+        await asyncio.sleep(2)
+
+    payload = str("Done").encode('ascii')
+    self._http.send_datagram(stream_id, payload)
 
 # WebTransportProtocol handles the beginning of a WebTransport connection: it
 # responses to an extended CONNECT method request, and routes the transport

@@ -165,4 +165,3 @@ function addToEventLog(text, severity = 'info') {
     entry.scrollIntoView();
   }
 }
-Footer
