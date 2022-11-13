@@ -94,7 +94,7 @@ BIND_PORT = 4433
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# CounterHandler implements a really simple protocol:
+# ChunkHandler implements a really simple protocol:
 #   - For every incoming bidirectional stream, it counts bytes it receives on
 #     that stream until the stream is closed, and then replies with that byte
 #     count on the same stream.
@@ -103,7 +103,7 @@ logger = logging.getLogger(__name__)
 #     count on a new unidirectional stream.
 #   - For every incoming datagram, it sends a datagram with the length of
 #     datagram that was just received.
-class CounterHandler:
+class ChunkHandler:
 
     def __init__(self, session_id, http: H3Connection) -> None:
         self._session_id = session_id
@@ -115,7 +115,7 @@ class CounterHandler:
             # payload = str(len(event.data)).encode('ascii')
             logging.info("received data: {}".format(event.data))
             # self._http.send_datagram(self._session_id, payload)
-            asyncio.create_task(chunk_handler(self, self._session_id))
+            asyncio.create_task(datagram_chunk_handler(self, self._session_id))
 
         if isinstance(event, WebTransportStreamDataReceived):
             self._counters[event.stream_id] += len(event.data)
@@ -126,10 +126,12 @@ class CounterHandler:
                         self._session_id, is_unidirectional=True)
                 else:
                     response_id = event.stream_id
-                payload = str(self._counters[event.stream_id]).encode('ascii')
-                self._http._quic.send_stream_data(
-                    response_id, payload, end_stream=True)
-                self.stream_closed(event.stream_id)
+
+                asyncio.create_task(stream_chunk_handler(self, response_id))
+                # payload = str(self._counters[event.stream_id]).encode('ascii')
+                # self._http._quic.send_stream_data(
+                #     response_id, payload, end_stream=True)
+                # self.stream_closed(event.stream_id)
 
     def stream_closed(self, stream_id: int) -> None:
         try:
@@ -137,28 +139,41 @@ class CounterHandler:
         except KeyError:
             pass
 
+    async def datagram_chunk_handler(self, stream_id):
+        i = 0
+        while i < 10:
+            payload = str("new ts chunk: {}".format(i)).encode('ascii')
+            logger.info("Sending chunk #{}".format(i))
+            self._http.send_datagram(stream_id, payload)
+            i += 1
+            await asyncio.sleep(2)
 
-async def chunk_handler(self, stream_id):
-    i = 0
-    while i < 10:
-        payload = str("new tls chunk: {}".format(i)).encode('ascii')
-        logger.info("Sending chunk #{}".format(i))
+        payload = str("Done").encode('ascii')
         self._http.send_datagram(stream_id, payload)
-        i += 1
-        await asyncio.sleep(2)
 
-    payload = str("Done").encode('ascii')
-    self._http.send_datagram(stream_id, payload)
+    async def stream_chunk_handler(self, stream_id):
+        i = 0
+        while i < 10:
+            payload = str("new tls chunk: {}".format(i)).encode('ascii')
+            logger.info("Sending chunk #{}".format(i))
+            self._http._quic.send_stream_data(stream_id, payload, end_stream=False)
+            i += 1
+            await asyncio.sleep(2)
+
+        payload = str("Done").encode('ascii')
+        self._http._quic.send_stream_data(stream_id, payload, end_stream=True)
+
+
 
 # WebTransportProtocol handles the beginning of a WebTransport connection: it
 # responses to an extended CONNECT method request, and routes the transport
-# events to a relevant handler (in this example, CounterHandler).
+# events to a relevant handler (in this example, ChunkHandler).
 class WebTransportProtocol(QuicConnectionProtocol):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._http: Optional[H3Connection] = None
-        self._handler: Optional[CounterHandler] = None
+        self._handler: Optional[ChunkHandler] = None
 
     def quic_event_received(self, event: QuicEvent) -> None:
         if isinstance(event, ProtocolNegotiated):
@@ -196,9 +211,9 @@ class WebTransportProtocol(QuicConnectionProtocol):
             # `:authority` and `:path` must be provided.
             self._send_response(stream_id, 400, end_stream=True)
             return
-        if path == b"/counter":
+        if path == b"/chunks":
             assert(self._handler is None)
-            self._handler = CounterHandler(stream_id, self._http)
+            self._handler = ChunkHandler(stream_id, self._http)
             self._send_response(stream_id, 200)
         else:
             self._send_response(stream_id, 404, end_stream=True)
