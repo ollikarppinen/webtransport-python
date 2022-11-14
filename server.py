@@ -160,7 +160,6 @@ async def stream_chunk_handler(self, stream_id):
         logger.info("Sending chunk #{}".format(i))
         self._http._quic.send_stream_data(stream_id, payload, end_stream=False)
         self.protocol.transmit()
-        self.transmit()
         i += 1
         await asyncio.sleep(2)
 
