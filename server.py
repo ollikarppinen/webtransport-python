@@ -80,6 +80,8 @@ import logging
 import sys
 from collections import defaultdict
 from typing import Dict, Optional
+import re
+import os
 
 from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h3.connection import H3_ALPN, H3Connection
@@ -141,15 +143,21 @@ class ChunkHandler:
             pass
 
 async def datagram_chunk_handler(self, stream_id):
+    transmitted_ts_media_files = []
     i = 0
+    p = re.compile('^.*.ts$')
     while i < 10:
-        payload = str("new .ts chunk: {}".format(i)).encode('ascii')
-        logger.info("Sending chunk #{}".format(i))
-        self._http.send_datagram(stream_id, payload)
-        self.protocol.transmit()
+        ts_media_files = [ s for s in os.listdir('./media') if p.match(s) ]
+        ts_media_files.sort()
         i += 1
-        await asyncio.sleep(2)
-
+        for ts_media_file in ts_media_files:
+            if ts_media_file not in transmitted_ts_media_files:
+                payload = str("new .ts chunk: {}".format(ts_media_file)).encode('ascii')
+                self._http.send_datagram(stream_id, payload)
+                self.protocol.transmit()
+                i = 0
+                transmitted_ts_media_files.append(ts_media_file)
+        await asyncio.sleep(0.5)
     payload = str("Done").encode('ascii')
     self._http.send_datagram(stream_id, payload)
 
@@ -161,7 +169,7 @@ async def stream_chunk_handler(self, stream_id):
         self._http._quic.send_stream_data(stream_id, payload, end_stream=False)
         self.protocol.transmit()
         i += 1
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.5)
 
     payload = str("Done").encode('ascii')
     self._http._quic.send_stream_data(stream_id, payload, end_stream=True)
