@@ -1,3 +1,4 @@
 certificate.key
 certificate.pem
 media/
+node_modules/

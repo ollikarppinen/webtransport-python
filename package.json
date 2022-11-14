@@ -1,0 +1,23 @@
+{
+  "name": "webtransport-python",
+  "version": "1.0.0",
+  "description": "Based on https://github.com/GoogleChrome/samples/tree/gh-pages/webtransport",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ollikarppinen/webtransport-python.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ollikarppinen/webtransport-python/issues"
+  },
+  "homepage": "https://github.com/ollikarppinen/webtransport-python#readme",
+  "dependencies": {
+    "serve": "^14.1.1"
+  }
+}
